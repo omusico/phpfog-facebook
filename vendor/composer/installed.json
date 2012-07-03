@@ -3,16 +3,16 @@
         "name": "facebook/php-sdk",
         "version": "dev-master",
         "version_normalized": "9999999-dev",
-        "time": "2012-06-22 05:13:39",
+        "time": "2012-07-02 18:59:33",
         "source": {
             "type": "git",
             "url": "git://github.com/facebook/facebook-php-sdk.git",
-            "reference": "71976b0ce565a6711f4b3c44a57c90867369db0d"
+            "reference": "8884b72db7b328090ed2e84075593dcdf42d04b7"
         },
         "dist": {
             "type": "zip",
-            "url": "https://github.com/facebook/facebook-php-sdk/zipball/71976b0ce565a6711f4b3c44a57c90867369db0d",
-            "reference": "71976b0ce565a6711f4b3c44a57c90867369db0d",
+            "url": "https://github.com/facebook/facebook-php-sdk/zipball/8884b72db7b328090ed2e84075593dcdf42d04b7",
+            "reference": "8884b72db7b328090ed2e84075593dcdf42d04b7",
             "shasum": ""
         },
         "require": {

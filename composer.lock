@@ -4,8 +4,8 @@
         {
             "package": "facebook/php-sdk",
             "version": "dev-master",
-            "source-reference": "71976b0ce565a6711f4b3c44a57c90867369db0d",
-            "commit-date": "1340342019"
+            "source-reference": "8884b72db7b328090ed2e84075593dcdf42d04b7",
+            "commit-date": "1341255573"
         }
     ],
     "packages-dev": null,

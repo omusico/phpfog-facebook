@@ -4,15 +4,15 @@
         {
             "package": "facebook/php-sdk",
             "version": "dev-master",
-            "source-reference": "8884b72db7b328090ed2e84075593dcdf42d04b7",
-            "commit-date": "1341255573"
+            "source-reference": "5e14dc3729ba52bd4ee188ffc202611250b2e8f8",
+            "commit-date": "1342487814"
         }
     ],
     "packages-dev": null,
     "aliases": [
 
     ],
-    "minimum-stability": "dev",
+    "minimum-stability": "stable",
     "stability-flags": [
 
     ]

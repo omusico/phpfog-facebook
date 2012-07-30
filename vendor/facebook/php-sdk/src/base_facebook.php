@@ -146,12 +146,12 @@ abstract class BaseFacebook
    * Maps aliases to Facebook domains.
    */
   public static $DOMAIN_MAP = array(
-    'api'       => 'https://api.facebook.com/',
-    'api_video' => 'https://api-video.facebook.com/',
-    'api_read'  => 'https://api-read.facebook.com/',
-    'graph'     => 'https://graph.facebook.com/',
+    'api'         => 'https://api.facebook.com/',
+    'api_video'   => 'https://api-video.facebook.com/',
+    'api_read'    => 'https://api-read.facebook.com/',
+    'graph'       => 'https://graph.facebook.com/',
     'graph_video' => 'https://graph-video.facebook.com/',
-    'www'       => 'https://www.facebook.com/',
+    'www'         => 'https://www.facebook.com/',
   );
 
   /**
@@ -219,7 +219,7 @@ abstract class BaseFacebook
 
     $state = $this->getPersistentData('state');
     if (!empty($state)) {
-      $this->state = $this->getPersistentData('state');
+      $this->state = $state;
     }
   }
 
@@ -544,7 +544,7 @@ abstract class BaseFacebook
       'logout.php',
       array_merge(array(
         'next' => $this->getCurrentUrl(),
-        'access_token' => $this->getAccessToken(),
+        'access_token' => $this->getUserAccessToken(),
       ), $params)
     );
   }
@@ -752,10 +752,13 @@ abstract class BaseFacebook
     // results are returned, errors are thrown
     if (is_array($result) && isset($result['error_code'])) {
       $this->throwAPIException($result);
+      // @codeCoverageIgnoreStart
     }
+    // @codeCoverageIgnoreEnd
 
-    if ($params['method'] === 'auth.expireSession' ||
-        $params['method'] === 'auth.revokeAuthorization') {
+    $method = strtolower($params['method']);
+    if ($method === 'auth.expiresession' ||
+        $method === 'auth.revokeauthorization') {
       $this->destroySession();
     }
 
@@ -808,7 +811,9 @@ abstract class BaseFacebook
     // results are returned, errors are thrown
     if (is_array($result) && isset($result['error'])) {
       $this->throwAPIException($result);
+      // @codeCoverageIgnoreStart
     }
+    // @codeCoverageIgnoreEnd
 
     return $result;
   }
@@ -1203,11 +1208,13 @@ abstract class BaseFacebook
 
         setcookie($cookie_name, '', 0, '/', $base_domain);
       } else {
+        // @codeCoverageIgnoreStart
         self::errorLog(
           'There exists a cookie that we wanted to clear that we couldn\'t '.
           'clear because headers was already sent. Make sure to do the first '.
           'API call before outputing anything'
         );
+        // @codeCoverageIgnoreEnd
       }
     }
   }

@@ -26,6 +26,7 @@ class PHPSDKTestCase extends PHPUnit_Framework_TestCase {
   private static $kValidSignedRequest = '1sxR88U4SW9m6QnSxwCEw_CObqsllXhnpP5j2pxD97c.eyJhbGdvcml0aG0iOiJITUFDLVNIQTI1NiIsImV4cGlyZXMiOjEyODEwNTI4MDAsIm9hdXRoX3Rva2VuIjoiMTE3NzQzOTcxNjA4MTIwfDIuVlNUUWpub3hYVVNYd1RzcDB1U2g5d19fLjg2NDAwLjEyODEwNTI4MDAtMTY3Nzg0NjM4NXx4NURORHBtcy1nMUM0dUJHQVYzSVdRX2pYV0kuIiwidXNlcl9pZCI6IjE2Nzc4NDYzODUifQ';
   private static $kNonTosedSignedRequest = 'c0Ih6vYvauDwncv0n0pndr0hP0mvZaJPQDPt6Z43O0k.eyJhbGdvcml0aG0iOiJITUFDLVNIQTI1NiJ9';
   private static $kSignedRequestWithBogusSignature = '1sxR32U4SW9m6QnSxwCEw_CObqsllXhnpP5j2pxD97c.eyJhbGdvcml0aG0iOiJITUFDLVNIQTI1NiIsImV4cGlyZXMiOjEyODEwNTI4MDAsIm9hdXRoX3Rva2VuIjoiMTE3NzQzOTcxNjA4MTIwfDIuVlNUUWpub3hYVVNYd1RzcDB1U2g5d19fLjg2NDAwLjEyODEwNTI4MDAtMTY3Nzg0NjM4NXx4NURORHBtcy1nMUM0dUJHQVYzSVdRX2pYV0kuIiwidXNlcl9pZCI6IjE2Nzc4NDYzODUifQ';
+  private static $kSignedRequestWithWrongAlgo = '2--BA2TJLbWV3uBHiB7ztrA4byNm9g0Sz8cv-x9-zi8.eyJhbGdvcml0aG0iOiJITUFDLVNIQTI1NmEiLCJpc3N1ZWRfYXQiOjEzNDI0ODc0ODJ9';
 
   public function testConstructor() {
     $facebook = new TransientFacebook(array(
@@ -288,7 +289,7 @@ class PHPSDKTestCase extends PHPUnit_Framework_TestCase {
   }
 
   public function testGetSignedRequestFromCookie() {
-    $facebook = new FBGetSignedRequestCookieFacebook(array(
+    $facebook = new FBPublicCookie(array(
       'appId'  => self::APP_ID,
       'secret' => self::SECRET,
     ));
@@ -301,7 +302,7 @@ class PHPSDKTestCase extends PHPUnit_Framework_TestCase {
   }
 
   public function testGetSignedRequestWithIncorrectSignature() {
-    $facebook = new FBGetSignedRequestCookieFacebook(array(
+    $facebook = new FBPublicCookie(array(
       'appId'  => self::APP_ID,
       'secret' => self::SECRET,
     ));
@@ -322,6 +323,45 @@ class PHPSDKTestCase extends PHPUnit_Framework_TestCase {
     $this->assertEquals($facebook->publicGetApplicationAccessToken(),
                         $facebook->getAccessToken(),
                         'Access token should be that for logged out users.');
+  }
+
+  public function testMissingMetadataCookie() {
+    $fb = new FBPublicCookie(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET,
+    ));
+    $this->assertEmpty($fb->publicGetMetadataCookie());
+  }
+
+  public function testEmptyMetadataCookie() {
+    $fb = new FBPublicCookie(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET,
+    ));
+    $_COOKIE[$fb->publicGetMetadataCookieName()] = '';
+    $this->assertEmpty($fb->publicGetMetadataCookie());
+  }
+
+  public function testMetadataCookie() {
+    $fb = new FBPublicCookie(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET,
+    ));
+    $key = 'foo';
+    $val = '42';
+    $_COOKIE[$fb->publicGetMetadataCookieName()] = "$key=$val";
+    $this->assertEquals(array($key => $val), $fb->publicGetMetadataCookie());
+  }
+
+  public function testQuotedMetadataCookie() {
+    $fb = new FBPublicCookie(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET,
+    ));
+    $key = 'foo';
+    $val = '42';
+    $_COOKIE[$fb->publicGetMetadataCookieName()] = "\"$key=$val\"";
+    $this->assertEquals(array($key => $val), $fb->publicGetMetadataCookie());
   }
 
   public function testAPIForLoggedOutUsers() {
@@ -492,8 +532,10 @@ class PHPSDKTestCase extends PHPUnit_Framework_TestCase {
       $this->fail('no exception was thrown on timeout.');
     }
 
-    $this->assertEquals(
-      CURLE_OPERATION_TIMEOUTED, $exception->getCode(), 'expect timeout');
+    $code = $exception->getCode();
+    if ($code != CURLE_OPERATION_TIMEOUTED && $code != CURLE_COULDNT_CONNECT) {
+      $this->fail("Expected curl error code 7 or 28 but got: $code");
+    }
     $this->assertEquals('CurlException', $exception->getType(), 'expect type');
   }
 
@@ -608,6 +650,7 @@ class PHPSDKTestCase extends PHPUnit_Framework_TestCase {
     $encodedUrl = rawurlencode('http://fbrell.com/examples');
     $this->assertNotNull(strpos($facebook->getLogoutUrl(), $encodedUrl),
                          'Expect the current url to exist.');
+    $this->assertFalse(strpos($facebook->getLogoutUrl(), self::SECRET));
   }
 
   public function testLoginStatusURLDefaults() {
@@ -732,6 +775,16 @@ class PHPSDKTestCase extends PHPUnit_Framework_TestCase {
       array('algorithm' => 'HMAC-SHA256'));
   }
 
+  public function testSignedRequestWithWrongAlgo() {
+    $fb = new FBPublic(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $payload = $fb->publicParseSignedRequest(
+      self::$kSignedRequestWithWrongAlgo);
+    $this->assertNull($payload, 'Expected nothing back.');
+  }
+
   public function testBundledCACert() {
     $facebook = new TransientFacebook(array(
       'appId'  => self::APP_ID,
@@ -757,6 +810,17 @@ class PHPSDKTestCase extends PHPUnit_Framework_TestCase {
     $facebook->api(array('method' => 'video.upload'));
     $this->assertContains('//api-video.', $facebook->getRequestedURL(),
                           'video.upload should go against api-video');
+  }
+
+  public function testVideoUploadGraph() {
+    $facebook = new FBRecordURL(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+
+    $facebook->api('/me/videos', 'POST');
+    $this->assertContains('//graph-video.', $facebook->getRequestedURL(),
+                          '/me/videos should go against graph-video');
   }
 
   public function testGetUserAndAccessTokenFromSession() {
@@ -817,6 +881,501 @@ class PHPSDKTestCase extends PHPUnit_Framework_TestCase {
                        'access token, or session variable.');
     $this->assertEmpty($_SESSION,
                        'Session superglobal incorrectly populated by getUser.');
+  }
+
+  public function testGetAccessTokenUsingCodeInJsSdkCookie() {
+    $code = 'code1';
+    $access_token = 'at1';
+    $methods_to_stub = array('getSignedRequest', 'getAccessTokenFromCode');
+    $constructor_args = array(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $stub = $this->getMock(
+      'TransientFacebook', $methods_to_stub, $constructor_args);
+    $stub
+      ->expects($this->once())
+      ->method('getSignedRequest')
+      ->will($this->returnValue(array('code' => $code)));
+    $stub
+      ->expects($this->once())
+      ->method('getAccessTokenFromCode')
+      ->will($this->returnValueMap(array(array($code, '', $access_token))));
+    $this->assertEquals($stub->getAccessToken(), $access_token);
+  }
+
+  public function testSignedRequestWithoutAuthClearsData() {
+    $methods_to_stub = array('getSignedRequest', 'clearAllPersistentData');
+    $constructor_args = array(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $stub = $this->getMock(
+      'TransientFacebook', $methods_to_stub, $constructor_args);
+    $stub
+      ->expects($this->once())
+      ->method('getSignedRequest')
+      ->will($this->returnValue(array('foo' => 1)));
+    $stub
+      ->expects($this->once())
+      ->method('clearAllPersistentData');
+    $this->assertEquals(self::APP_ID.'|'.self::SECRET, $stub->getAccessToken());
+  }
+
+  public function testInvalidCodeInSignedRequestWillClearData() {
+    $code = 'code1';
+    $methods_to_stub = array(
+      'getSignedRequest',
+      'getAccessTokenFromCode',
+      'clearAllPersistentData',
+    );
+    $constructor_args = array(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $stub = $this->getMock(
+      'TransientFacebook', $methods_to_stub, $constructor_args);
+    $stub
+      ->expects($this->once())
+      ->method('getSignedRequest')
+      ->will($this->returnValue(array('code' => $code)));
+    $stub
+      ->expects($this->once())
+      ->method('getAccessTokenFromCode')
+      ->will($this->returnValue(null));
+    $stub
+      ->expects($this->once())
+      ->method('clearAllPersistentData');
+    $this->assertEquals(self::APP_ID.'|'.self::SECRET, $stub->getAccessToken());
+  }
+
+  public function testInvalidCodeWillClearData() {
+    $code = 'code1';
+    $methods_to_stub = array(
+      'getCode',
+      'getAccessTokenFromCode',
+      'clearAllPersistentData',
+    );
+    $constructor_args = array(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $stub = $this->getMock(
+      'TransientFacebook', $methods_to_stub, $constructor_args);
+    $stub
+      ->expects($this->once())
+      ->method('getCode')
+      ->will($this->returnValue($code));
+    $stub
+      ->expects($this->once())
+      ->method('getAccessTokenFromCode')
+      ->will($this->returnValue(null));
+    $stub
+      ->expects($this->once())
+      ->method('clearAllPersistentData');
+    $this->assertEquals(self::APP_ID.'|'.self::SECRET, $stub->getAccessToken());
+  }
+
+  public function testValidCodeToToken() {
+    $code = 'code1';
+    $access_token = 'at1';
+    $methods_to_stub = array(
+      'getSignedRequest',
+      'getCode',
+      'getAccessTokenFromCode',
+    );
+    $constructor_args = array(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $stub = $this->getMock(
+      'TransientFacebook', $methods_to_stub, $constructor_args);
+    $stub
+      ->expects($this->once())
+      ->method('getCode')
+      ->will($this->returnValue($code));
+    $stub
+      ->expects($this->once())
+      ->method('getAccessTokenFromCode')
+      ->will($this->returnValueMap(array(array($code, null, $access_token))));
+    $this->assertEquals($stub->getAccessToken(), $access_token);
+  }
+
+  public function testSignedRequestWithoutAuthClearsDataInAvailData() {
+    $methods_to_stub = array('getSignedRequest', 'clearAllPersistentData');
+    $constructor_args = array(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $stub = $this->getMock(
+      'TransientFacebook', $methods_to_stub, $constructor_args);
+    $stub
+      ->expects($this->once())
+      ->method('getSignedRequest')
+      ->will($this->returnValue(array('foo' => 1)));
+    $stub
+      ->expects($this->once())
+      ->method('clearAllPersistentData');
+    $this->assertEquals(0, $stub->getUser());
+  }
+
+  public function testFailedToGetUserFromAccessTokenClearsData() {
+    $methods_to_stub = array(
+      'getAccessToken',
+      'getUserFromAccessToken',
+      'clearAllPersistentData',
+    );
+    $constructor_args = array(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $stub = $this->getMock(
+      'TransientFacebook', $methods_to_stub, $constructor_args);
+    $stub
+      ->expects($this->once())
+      ->method('getAccessToken')
+      ->will($this->returnValue('at1'));
+    $stub
+      ->expects($this->once())
+      ->method('getUserFromAccessToken');
+    $stub
+      ->expects($this->once())
+      ->method('clearAllPersistentData');
+    $this->assertEquals(0, $stub->getUser());
+  }
+
+  public function testUserFromAccessTokenIsStored() {
+    $methods_to_stub = array(
+      'getAccessToken',
+      'getUserFromAccessToken',
+      'setPersistentData',
+    );
+    $constructor_args = array(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $user = 42;
+    $stub = $this->getMock(
+      'TransientFacebook', $methods_to_stub, $constructor_args);
+    $stub
+      ->expects($this->once())
+      ->method('getAccessToken')
+      ->will($this->returnValue('at1'));
+    $stub
+      ->expects($this->once())
+      ->method('getUserFromAccessToken')
+      ->will($this->returnValue($user));
+    $stub
+      ->expects($this->once())
+      ->method('setPersistentData');
+    $this->assertEquals($user, $stub->getUser());
+  }
+
+  public function testUserFromAccessTokenPullsID() {
+    $methods_to_stub = array(
+      'getAccessToken',
+      'api',
+    );
+    $constructor_args = array(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $user = 42;
+    $stub = $this->getMock(
+      'TransientFacebook', $methods_to_stub, $constructor_args);
+    $stub
+      ->expects($this->once())
+      ->method('getAccessToken')
+      ->will($this->returnValue('at1'));
+    $stub
+      ->expects($this->once())
+      ->method('api')
+      ->will($this->returnValue(array('id' => $user)));
+    $this->assertEquals($user, $stub->getUser());
+  }
+
+  public function testUserFromAccessTokenResetsOnApiException() {
+    $methods_to_stub = array(
+      'getAccessToken',
+      'clearAllPersistentData',
+      'api',
+    );
+    $constructor_args = array(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $stub = $this->getMock(
+      'TransientFacebook', $methods_to_stub, $constructor_args);
+    $stub
+      ->expects($this->once())
+      ->method('getAccessToken')
+      ->will($this->returnValue('at1'));
+    $stub
+      ->expects($this->once())
+      ->method('api')
+      ->will($this->throwException(new FacebookApiException(false)));
+    $stub
+      ->expects($this->once())
+      ->method('clearAllPersistentData');
+    $this->assertEquals(0, $stub->getUser());
+  }
+
+  public function testEmptyCodeReturnsFalse() {
+    $fb = new FBPublicGetAccessTokenFromCode(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $this->assertFalse($fb->publicGetAccessTokenFromCode(''));
+    $this->assertFalse($fb->publicGetAccessTokenFromCode(null));
+    $this->assertFalse($fb->publicGetAccessTokenFromCode(false));
+  }
+
+  public function testNullRedirectURIUsesCurrentURL() {
+    $methods_to_stub = array(
+      '_oauthRequest',
+      'getCurrentUrl',
+    );
+    $constructor_args = array(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $access_token = 'at1';
+    $stub = $this->getMock(
+      'FBPublicGetAccessTokenFromCode', $methods_to_stub, $constructor_args);
+    $stub
+      ->expects($this->once())
+      ->method('_oauthRequest')
+      ->will($this->returnValue("access_token=$access_token"));
+    $stub
+      ->expects($this->once())
+      ->method('getCurrentUrl');
+    $this->assertEquals(
+      $access_token, $stub->publicGetAccessTokenFromCode('c'));
+  }
+
+  public function testNullRedirectURIAllowsEmptyStringForCookie() {
+    $methods_to_stub = array(
+      '_oauthRequest',
+      'getCurrentUrl',
+    );
+    $constructor_args = array(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $access_token = 'at1';
+    $stub = $this->getMock(
+      'FBPublicGetAccessTokenFromCode', $methods_to_stub, $constructor_args);
+    $stub
+      ->expects($this->once())
+      ->method('_oauthRequest')
+      ->will($this->returnValue("access_token=$access_token"));
+    $stub
+      ->expects($this->never())
+      ->method('getCurrentUrl');
+    $this->assertEquals(
+      $access_token, $stub->publicGetAccessTokenFromCode('c', ''));
+  }
+
+  public function testAPIExceptionDuringCodeExchangeIsIgnored() {
+    $methods_to_stub = array(
+      '_oauthRequest',
+    );
+    $constructor_args = array(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $stub = $this->getMock(
+      'FBPublicGetAccessTokenFromCode', $methods_to_stub, $constructor_args);
+    $stub
+      ->expects($this->once())
+      ->method('_oauthRequest')
+      ->will($this->throwException(new FacebookApiException(false)));
+    $this->assertFalse($stub->publicGetAccessTokenFromCode('c', ''));
+  }
+
+  public function testEmptyResponseInCodeExchangeIsIgnored() {
+    $methods_to_stub = array(
+      '_oauthRequest',
+    );
+    $constructor_args = array(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $stub = $this->getMock(
+      'FBPublicGetAccessTokenFromCode', $methods_to_stub, $constructor_args);
+    $stub
+      ->expects($this->once())
+      ->method('_oauthRequest')
+      ->will($this->returnValue(''));
+    $this->assertFalse($stub->publicGetAccessTokenFromCode('c', ''));
+  }
+
+  public function testExistingStateRestoredInConstructor() {
+    $fb = new FBPublicState(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $this->assertEquals(FBPublicState::STATE, $fb->publicGetState());
+  }
+
+  public function testMissingAccessTokenInCodeExchangeIsIgnored() {
+    $methods_to_stub = array(
+      '_oauthRequest',
+    );
+    $constructor_args = array(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $stub = $this->getMock(
+      'FBPublicGetAccessTokenFromCode', $methods_to_stub, $constructor_args);
+    $stub
+      ->expects($this->once())
+      ->method('_oauthRequest')
+      ->will($this->returnValue('foo=1'));
+    $this->assertFalse($stub->publicGetAccessTokenFromCode('c', ''));
+  }
+
+  public function testExceptionConstructorWithErrorCode() {
+    $code = 404;
+    $e = new FacebookApiException(array('error_code' => $code));
+    $this->assertEquals($code, $e->getCode());
+  }
+
+  // this happens often despite the fact that it is useless
+  public function testExceptionTypeFalse() {
+    $e = new FacebookApiException(false);
+    $this->assertEquals('Exception', $e->getType());
+  }
+
+  public function testExceptionTypeMixedDraft00() {
+    $e = new FacebookApiException(array('error' => array('message' => 'foo')));
+    $this->assertEquals('Exception', $e->getType());
+  }
+
+  public function testExceptionTypeDraft00() {
+    $error = 'foo';
+    $e = new FacebookApiException(
+      array('error' => array('type' => $error, 'message' => 'hello world')));
+    $this->assertEquals($error, $e->getType());
+  }
+
+  public function testExceptionTypeDraft10() {
+    $error = 'foo';
+    $e = new FacebookApiException(array('error' => $error));
+    $this->assertEquals($error, $e->getType());
+  }
+
+  public function testExceptionTypeDefault() {
+    $e = new FacebookApiException(array('error' => false));
+    $this->assertEquals('Exception', $e->getType());
+  }
+
+  public function testExceptionToString() {
+    $e = new FacebookApiException(array(
+      'error_code' => 1,
+      'error_description' => 'foo',
+    ));
+    $this->assertEquals('Exception: 1: foo', (string) $e);
+  }
+
+  public function testDestroyClearsCookie() {
+    $fb = new FBPublicCookie(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET,
+    ));
+    $_COOKIE[$fb->publicGetSignedRequestCookieName()] = 'foo';
+    $_COOKIE[$fb->publicGetMetadataCookieName()] = 'base_domain=fbrell.com';
+    $_SERVER['HTTP_HOST'] = 'fbrell.com';
+    $fb->destroySession();
+    $this->assertFalse(
+      array_key_exists($fb->publicGetSignedRequestCookieName(), $_COOKIE));
+  }
+
+  public function testAuthExpireSessionDestroysSession() {
+    $methods_to_stub = array(
+      '_oauthRequest',
+      'destroySession',
+    );
+    $constructor_args = array(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $key = 'foo';
+    $val = 42;
+    $stub = $this->getMock(
+      'TransientFacebook', $methods_to_stub, $constructor_args);
+    $stub
+      ->expects($this->once())
+      ->method('_oauthRequest')
+      ->will($this->returnValue("{\"$key\":$val}"));
+    $stub
+      ->expects($this->once())
+      ->method('destroySession');
+    $this->assertEquals(
+      array($key => $val),
+      $stub->api(array('method' => 'auth.expireSession'))
+    );
+  }
+
+  public function testLowercaseAuthRevokeAuthDestroysSession() {
+    $methods_to_stub = array(
+      '_oauthRequest',
+      'destroySession',
+    );
+    $constructor_args = array(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $key = 'foo';
+    $val = 42;
+    $stub = $this->getMock(
+      'TransientFacebook', $methods_to_stub, $constructor_args);
+    $stub
+      ->expects($this->once())
+      ->method('_oauthRequest')
+      ->will($this->returnValue("{\"$key\":$val}"));
+    $stub
+      ->expects($this->once())
+      ->method('destroySession');
+    $this->assertEquals(
+      array($key => $val),
+      $stub->api(array('method' => 'auth.revokeauthorization'))
+    );
+  }
+
+  /**
+   * @expectedException FacebookAPIException
+   */
+  public function testErrorCodeFromRestAPIThrowsException() {
+    $methods_to_stub = array(
+      '_oauthRequest',
+    );
+    $constructor_args = array(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET
+    ));
+    $stub = $this->getMock(
+      'TransientFacebook', $methods_to_stub, $constructor_args);
+    $stub
+      ->expects($this->once())
+      ->method('_oauthRequest')
+      ->will($this->returnValue('{"error_code": 500}'));
+    $stub->api(array('method' => 'foo'));
+  }
+
+  public function testJsonEncodeOfNonStringParams() {
+    $foo = array(1, 2);
+    $params = array(
+      'method' => 'get',
+      'foo' => $foo,
+    );
+    $fb = new FBRecordMakeRequest(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET,
+    ));
+    $fb->api('/naitik', $params);
+    $requests = $fb->publicGetRequests();
+    $this->assertEquals(json_encode($foo), $requests[0]['params']['foo']);
   }
 
   protected function generateMD5HashOfRandomValue() {
@@ -882,6 +1441,22 @@ class FBRecordURL extends TransientFacebook {
   }
 }
 
+class FBRecordMakeRequest extends TransientFacebook {
+  private $requests = array();
+
+  protected function makeRequest($url, $params, $ch=null) {
+    $this->requests[] = array(
+      'url' => $url,
+      'params' => $params,
+    );
+    return parent::makeRequest($url, $params, $ch);
+  }
+
+  public function publicGetRequests() {
+    return $this->requests;
+  }
+}
+
 class FBPublic extends TransientFacebook {
   public static function publicBase64UrlDecode($input) {
     return self::base64UrlDecode($input);
@@ -927,12 +1502,41 @@ class FBGetCurrentURLFacebook extends TransientFacebook {
   }
 }
 
-class FBGetSignedRequestCookieFacebook extends TransientFacebook {
+class FBPublicCookie extends TransientFacebook {
   public function publicGetSignedRequest() {
     return $this->getSignedRequest();
   }
 
   public function publicGetSignedRequestCookieName() {
     return $this->getSignedRequestCookieName();
+  }
+
+  public function publicGetMetadataCookie() {
+    return $this->getMetadataCookie();
+  }
+
+  public function publicGetMetadataCookieName() {
+    return $this->getMetadataCookieName();
+  }
+}
+
+
+class FBPublicGetAccessTokenFromCode extends TransientFacebook {
+  public function publicGetAccessTokenFromCode($code, $redirect_uri = null) {
+    return $this->getAccessTokenFromCode($code, $redirect_uri);
+  }
+}
+
+class FBPublicState extends TransientFacebook {
+  const STATE = 'foo';
+  protected function getPersistentData($key, $default = false) {
+    if ($key === 'state') {
+      return self::STATE;
+    }
+    return parent::getPersistentData($key, $default);
+  }
+
+  public function publicGetState() {
+    return $this->state;
   }
 }
